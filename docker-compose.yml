@@ -1,0 +1,132 @@
+# This is main compose file for complete Plausible deployment.#
+## If you don't know what to do or run into any issues, please visit https://webnestify.cloud/docker-deployment-service/ .##
+### Complete written & video guide avalaible at https://docs.webnestify.cloud/books/self-hosted-applications/page/plausible-installation-guide .###
+#### If you like Plausible project, please support Plausible by subscribing to their cloud platform at https://plausible.io/#pricing .#####
+##### Become a Plausible sponsor at https://github.com/sponsors/plausible .#####
+###### Change values between square brackets [] to your own values!!######
+####### Webnestify | https://webnestify.cloud .#######
+
+version: "3.3"
+
+services:
+  mail:
+    image: bytemark/smtp #SMTP Mailer Service
+    restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    networks:
+      cloudflared:
+
+  plausible_db:
+    # supported versions are 12, 13, and 14
+    image: postgres:14-alpine #User data database
+    restart: always
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    networks:
+      cloudflared:
+
+  plausible_events_db:
+    image: clickhouse/clickhouse-server:22.6-alpine #Analytics database
+    restart: always
+    volumes:
+      - event-data:/var/lib/clickhouse
+      - ./clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/logging.xml:ro
+      - ./clickhouse/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/logging.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    networks:
+      cloudflared:
+
+  plausible:
+    image: plausible/analytics:latest #Plausible API & Front-end
+    restart: always
+    command: sh -c "sleep 10 && /entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh db init-admin && /entrypoint.sh run"
+    depends_on:
+      - plausible_db
+      - plausible_events_db
+      - mail
+    ports:
+      - 8000:8000
+    environment:
+      - ADMIN_USER_EMAIL=[ADD YOUR MAIN EMAIL]
+      - ADMIN_USER_NAME=[ADD YOUR NAME]
+      - ADMIN_USER_PWD=[ADD YOUR PASSWORD] # Use only character and numbers
+      - BASE_URL=[ADD YOUR URL] # for example, https://analytics.example.com
+      - DISABLE_REGISTRATION=true # Change 'true' to false if you want to enable public registrations
+      - SECRET_KEY_BASE=[ADD YOUR GENERATED KEY] # To get key, run following command: openssl rand -base64 64 | tr -d '\n' ; echo
+      - MAILER_EMAIL=[ADD YOUR SMTP FROM EMAIL]
+      - SMTP_HOST_ADDR=smtp.postmarkapp.com # Change SMTP server, if you are not using Postmark
+      - SMTP_HOST_PORT=587 # If not supported, change to your supported SMTP port
+      - SMTP_USER_NAME=[ADD YOUR SMTP API KEY/CREDENTIALS]
+      - SMTP_USER_PWD=[ADD YOUR SMTP API KEY/CREDENTIALS]
+      - SMTP_HOST_SSL_ENABLED=true
+      - MAILER_ADAPTER=Bamboo.PostmarkAdapter # Change 'Bamboo.PostmarkAdapter' to 'Bamboo.SMTPAdapter' if you are not using Postmark.
+#      - POSTMARK_API_KEY=[ADD YOUR SMTP API KEY/CREDENTIALS] # Keep commented out by '#' at the beginning of this line, if you are not using Postmark.
+#      - GOOGLE_CLIENT_ID=[ADD YOUR API KEY] # Uncommend this line and add your API Keys. Visit https://plausible.io/docs/self-hosting-configuration#google-search-integration to get your API keys.
+#      - GOOGLE_CLIENT_SECRET=[ADD YOUR API KEY] # Uncommend this line and add your API Keys. Visit https://plausible.io/docs/self-hosting-configuration#google-search-integration to get your API keys.
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    networks:
+      cloudflared:
+
+  plausible_geoip:
+    image: maxmindinc/geoipupdate #GEO IP Service
+    environment:
+      - GEOIPUPDATE_EDITION_IDS=GeoLite2-Country
+      - GEOIPUPDATE_FREQUENCY=168 # update every 7 days
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=[ADD YOUR API KEY] # Generate key at https://www.maxmind.com/en/geolite2/signup?lang=en
+      - GEOIPUPDATE_LICENSE_KEY=[ADD YOUR API KEY] # Generate key at https://www.maxmind.com/en/geolite2/signup?lang=en
+    volumes:
+      - geoip:/usr/share/GeoIP
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    restart: always
+    networks:
+      cloudflared:
+
+#  watchtower: # Uncomment this line, if you want to enable automatic updates. Make sure you have backup policy in place!!!!
+    image: containrrr/watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_REVIVE_STOPPED=true
+      - WATCHTOWER_LABEL_ENABLE=true # Only update containers with 'com.centurylinklabs.watchtower.enable=true' label
+      - WATCHTOWER_NOTIFICATIONS=email
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=[ADD YOUR SMTP FROM EMAIL]
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO=[ADD YOUR MAIN EMAIL]
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=smtp.postmarkapp.com # Change SMTP server, if you are not using Postmark
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=587 # If not supported, change to your supported SMTP port
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=[ADD YOUR SMTP API KEY/CREDENTIALS]
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=[ADD YOUR SMTP API KEY/CREDENTIALS]
+    command: --interval 30000
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true" # Change 'true' to 'false' if you want to disable autoupdate.
+    networks:
+      cloudflared:
+
+volumes:
+  db-data:
+    driver: local
+  event-data:
+    driver: local
+  geoip:
+    driver: local
+
+networks:
+  cloudflared:
+    external: false
