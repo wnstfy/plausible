@@ -83,7 +83,6 @@ services:
     environment:
       - GEOIPUPDATE_EDITION_IDS=GeoLite2-Country
       - GEOIPUPDATE_FREQUENCY=168 # update every 7 days
-    environment:
       - GEOIPUPDATE_ACCOUNT_ID=[ADD YOUR API KEY] # Generate key at https://www.maxmind.com/en/geolite2/signup?lang=en
       - GEOIPUPDATE_LICENSE_KEY=[ADD YOUR API KEY] # Generate key at https://www.maxmind.com/en/geolite2/signup?lang=en
     volumes:
